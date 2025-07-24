@@ -1,4 +1,4 @@
-// login_page.dart
+// lib/login_page.dart
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -16,8 +16,10 @@ class _LoginPageState extends State<LoginPage> {
   bool isRegistering = false;
 
   Future<void> submit() async {
+    // CORRIGIDO AQUI
     final uri = Uri.parse(
         'http://localhost:5000/${isRegistering ? 'register' : 'login'}');
+        
     final response = await http.post(
       uri,
       headers: {'Content-Type': 'application/json'},
@@ -48,6 +50,7 @@ class _LoginPageState extends State<LoginPage> {
       body: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             TextField(
               controller: _userController,
