@@ -1,100 +1,72 @@
-# FLASK BACKEND (app.py) - calendário com login e eventos fixos
+# app.py (versão com CORS corrigido para desenvolvimento)
+
 from flask import Flask, request, jsonify, session
 from flask_cors import CORS
-from werkzeug.security import generate_password_hash, check_password_hash
-import sqlite3
+from flask_session import Session
+from datetime import datetime
 
 app = Flask(__name__)
-app.secret_key = 'super-secret-key'
-CORS(app, supports_credentials=True)
 
-DB_NAME = 'calendar.db'
+app.config["SECRET_KEY"] = "sua-chave-secreta-deve-ser-dificil-de-adivinhar"
+app.config["SESSION_TYPE"] = "filesystem"
+app.config["SESSION_COOKIE_SAMESITE"] = "None" 
+app.config["SESSION_COOKIE_SECURE"] = True
+Session(app)
 
-class DBHelper:
-    def __init__(self):
-        self.conn = sqlite3.connect(DB_NAME, check_same_thread=False)
-        self.cursor = self.conn.cursor()
-        self.create_tables()
+# --- ALTERAÇÃO PRINCIPAL AQUI ---
+CORS(app, supports_credentials=True, resources={
+    r"/*": {
+        # Permite pedidos de qualquer origem. Ideal para desenvolvimento local.
+        "origins": "*", 
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"]
+    }
+})
 
-    def create_tables(self):
-        self.cursor.execute('''CREATE TABLE IF NOT EXISTS users (
-                                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                username TEXT UNIQUE NOT NULL,
-                                password TEXT NOT NULL)''')
-        self.cursor.execute('''CREATE TABLE IF NOT EXISTS fixed_events (
-                                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                title TEXT, date TEXT, time TEXT, description TEXT)''')
-        self.conn.commit()
 
-    def add_user(self, username, password):
-        try:
-            hashed = generate_password_hash(password)
-            self.cursor.execute('INSERT INTO users (username, password) VALUES (?, ?)', (username, hashed))
-            self.conn.commit()
-            return True
-        except sqlite3.IntegrityError:
-            return False
+@app.before_request
+def require_login():
+    if request.method == 'OPTIONS':
+        return
+    exempt_routes = ['login']
+    if request.endpoint not in exempt_routes and 'user_id' not in session:
+        return jsonify({"error": "Autenticação necessária, por favor faça login."}), 401
 
-    def verify_user(self, username, password):
-        self.cursor.execute('SELECT password FROM users WHERE username = ?', (username,))
-        row = self.cursor.fetchone()
-        if row and check_password_hash(row[0], password):
-            return True
-        return False
-
-    def add_fixed_event(self, title, date, time, description):
-        self.cursor.execute('INSERT INTO fixed_events (title, date, time, description) VALUES (?, ?, ?, ?)',
-                            (title, date, time, description))
-        self.conn.commit()
-
-    def get_events_by_date(self, date):
-        self.cursor.execute('SELECT title, date, time, description FROM fixed_events WHERE date = ?', (date,))
-        return self.cursor.fetchall()
-
-    def insert_sample_events(self):
-        self.cursor.execute('SELECT COUNT(*) FROM fixed_events')
-        count = self.cursor.fetchone()[0]
-        if count == 0:
-            self.add_fixed_event("Reunião mensal", "2025-07-25", "10:00 - 12:00", "Reunião de alinhamento com equipe")
-            self.add_fixed_event("Feriado Nacional", "2025-07-30", "11:30 - 15:00", "Comemoração da Liberdade Nacional")
-            self.add_fixed_event("Revisão de Projeto", "2025-07-25", "14:00 - 15:00", "Revisar escopo do projeto XPTO")
-
-# Instanciar DB
-db = DBHelper()
-
-@app.route('/register', methods=['POST'])
-def register():
-    data = request.json
-    if db.add_user(data['username'], data['password']):
-        return jsonify({'message': 'Usuário registrado com sucesso.'}), 201
-    else:
-        return jsonify({'error': 'Nome de usuário já existe.'}), 409
 
 @app.route('/login', methods=['POST'])
 def login():
-    data = request.json
-    if db.verify_user(data['username'], data['password']):
-        session['user'] = data['username']
-        return jsonify({'message': 'Login bem-sucedido.'}), 200
+    data = request.get_json()
+    print(f"Dados recebidos para login: {data}") # Mantendo a depuração
+    
+    username = data.get('username')
+    password = data.get('password')
+
+    if username == 'juju' and password == '123456':
+        session['user_id'] = 1
+        session['username'] = username
+        print(f"✅ Usuário '{username}' logado com sucesso. ID da sessão: {session.sid}")
+        return jsonify({"message": "Login bem-sucedido.", "user_id": 1}), 200
     else:
-        return jsonify({'error': 'Usuário ou senha incorretos.'}), 401
+        print(f"❌ Falha no login para o usuário '{username}'. Credenciais não correspondem.")
+        return jsonify({"error": "Credenciais inválidas"}), 401
 
 @app.route('/logout', methods=['POST'])
 def logout():
-    session.pop('user', None)
-    return jsonify({'message': 'Logout realizado.'})
+    print(f"✅ Usuário '{session.get('username')}' fazendo logout.")
+    session.clear()
+    return jsonify({"message": "Logout bem-sucedido."}), 200
 
-@app.route('/me', methods=['GET'])
-def get_current_user():
-    user = session.get('user')
-    if user:
-        return jsonify({'username': user})
-    return jsonify({'error': 'Não autenticado.'}), 403
+@app.route('/events', methods=['GET'])
+def get_events():
+    user_id = session.get('user_id')
+    print(f"✅ Buscando eventos para o usuário ID: {user_id}")
+    
+    events = [
+        {"id": 1, "title": "Palestra de Boas-Vindas", "time": "09:00", "date": "2025-07-28T09:00:00", "description": "Abertura da Semana da Computação."},
+        {"id": 2, "title": "Workshop de Docker", "time": "14:00", "date": "2025-07-28T14:00:00", "description": "Introdução a contêineres com Docker."},
+        {"id": 3, "title": "Palestra de IA", "time": "10:00", "date": "2025-07-29T10:00:00", "description": "O futuro da Inteligência Artificial."}
+    ]
+    return jsonify(events)
 
-@app.route('/calendar/<date>', methods=['GET'])
-def get_events(date):
-    rows = db.get_events_by_date(date)
-    return jsonify([{'title': r[0], 'date': r[1], 'time': r[2], 'description': r[3]} for r in rows])
-
-db.insert_sample_events()
-app.run(debug=True)
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=True)
