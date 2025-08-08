@@ -1,14 +1,11 @@
 // lib/calendar_page.dart
-
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:table_calendar/table_calendar.dart';
 
 import 'api_service.dart';
 import 'event_detail_page.dart';
-import 'main.dart'; // Para acessar o AuthProvider
-import 'my_agenda_page.dart';
+import 'main.dart'; // AuthProvider para logout (se existir)
 
 class CalendarPage extends StatefulWidget {
   const CalendarPage({super.key});
@@ -20,66 +17,96 @@ class CalendarPage extends StatefulWidget {
 class _CalendarPageState extends State<CalendarPage> {
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
-  List<dynamic> _allEvents = [];
   final ValueNotifier<List<dynamic>> _selectedEvents = ValueNotifier([]);
   bool _isLoading = true;
+
+  // armazenar ids dos eventos que o usuário já está inscrito
+  final Set<int> _subscribedEventIds = {};
 
   @override
   void initState() {
     super.initState();
     _selectedDay = _focusedDay;
-    _fetchAllUserEvents();
+    _loadForDay(_focusedDay);
+    _loadSubscriptions();
   }
 
-  Future<void> _fetchAllUserEvents() async {
-    setState(() => _isLoading = true);
+  @override
+  void dispose() {
+    _selectedEvents.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadSubscriptions() async {
     try {
-      final events = await ApiService.get('/events');
-      if (mounted) {
-        setState(() {
-          _allEvents = events;
-        });
-        _filterEventsForDay(_selectedDay!);
-      }
-    } catch (e) {
-      debugPrint("Erro ao buscar eventos: $e");
-      if (mounted) {
-        if (e.toString().contains('401')) {
-          Provider.of<AuthProvider>(context, listen: false).logout();
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-                content: Text('Erro ao buscar seus eventos.'),
-                backgroundColor: Colors.red),
-          );
+      final list = await ApiService.getMyAgenda();
+      final ids = <int>{};
+      for (final e in list) {
+        if (e is Map && e.containsKey('id')) {
+          ids.add((e['id'] as num).toInt());
         }
       }
-    } finally {
       if (mounted) {
-        setState(() => _isLoading = false);
+        setState(() {
+          _subscribedEventIds.clear();
+          _subscribedEventIds.addAll(ids);
+        });
       }
+    } catch (e) {
+      debugPrint('Erro ao carregar subscriptions: $e');
+      // não falhar o fluxo, apenas manter vazio
     }
   }
 
-  void _filterEventsForDay(DateTime day) {
-    final eventsForDay = _allEvents.where((event) {
-      final eventDateString = event['date'] as String?;
-      if (eventDateString == null) {
-        return false;
+  Future<void> _loadForDay(DateTime date) async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    final formattedDate = "${date.year.toString().padLeft(4, '0')}-"
+        "${date.month.toString().padLeft(2, '0')}-"
+        "${date.day.toString().padLeft(2, '0')}";
+
+    try {
+      final respGlobal =
+          await ApiService.fetchEvents(formattedDate, onlyMyEvents: false);
+      final globalBody = (respGlobal['status'] == 200)
+          ? List<Map<String, dynamic>>.from(respGlobal['body'] as List)
+          : <Map<String, dynamic>>[];
+
+      final respMy =
+          await ApiService.fetchEvents(formattedDate, onlyMyEvents: true);
+      final myBody = (respMy['status'] == 200)
+          ? List<Map<String, dynamic>>.from(respMy['body'] as List)
+          : <Map<String, dynamic>>[];
+
+      final merged = <Map<String, dynamic>>[];
+      for (final e in [...globalBody, ...myBody]) {
+        final mapE = Map<String, dynamic>.from(e);
+        final key = "${mapE['id']}_${mapE['title']}_${mapE['date']}_${mapE['time']}";
+        if (!merged.any((m) =>
+            "${m['id']}_${m['title']}_${m['date']}_${m['time']}" == key)) {
+          merged.add(mapE);
+        }
       }
 
-      try {
-        final eventDate = DateTime.parse(eventDateString);
-        return eventDate.year == day.year &&
-            eventDate.month == day.month &&
-            eventDate.day == day.day;
-      } catch (e) {
-        debugPrint("Erro ao converter data do evento: $e");
-        return false;
+      _selectedEvents.value = merged;
+      // atualizar subscribed ids (para refletir inscricoes novas)
+      await _loadSubscriptions();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao carregar eventos: $e')),
+        );
       }
-    }).toList();
-
-    _selectedEvents.value = eventsForDay;
+      _selectedEvents.value = [];
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   void _onDaySelected(DateTime selectedDay, DateTime focusedDay) {
@@ -88,8 +115,32 @@ class _CalendarPageState extends State<CalendarPage> {
         _selectedDay = selectedDay;
         _focusedDay = focusedDay;
       });
-      _filterEventsForDay(selectedDay);
+      _loadForDay(selectedDay);
     }
+  }
+
+  Future<void> _toggleSubscription(int eventId) async {
+    if (_subscribedEventIds.contains(eventId)) {
+      final res = await ApiService.unsubscribeEvent(eventId);
+      final ok = res['status'] == 200;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(ok ? 'Removido da sua agenda' : (res['body']['error'] ?? 'Erro'))),
+      );
+      if (ok) {
+        _subscribedEventIds.remove(eventId);
+      }
+    } else {
+      final res = await ApiService.subscribeEvent(eventId);
+      final ok = res['status'] == 201;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(ok ? 'Adicionado à sua agenda' : (res['body']['error'] ?? 'Erro'))),
+      );
+      if (ok) {
+        _subscribedEventIds.add(eventId);
+      }
+    }
+    // atualizar lista do dia para refletir estado
+    _loadForDay(_selectedDay ?? DateTime.now());
   }
 
   @override
@@ -102,7 +153,16 @@ class _CalendarPageState extends State<CalendarPage> {
             icon: const Icon(Icons.logout),
             tooltip: 'Sair',
             onPressed: () async {
-              await Provider.of<AuthProvider>(context, listen: false).logout();
+              // chama o logout do provider (se existir) e limpa token
+              if (Provider.of<AuthProvider?>(context, listen: false) != null) {
+                await Provider.of<AuthProvider>(context, listen: false).logout();
+              } else {
+                await ApiService.logout();
+              }
+              // recarregar subscriptions vazias
+              setState(() {
+                _subscribedEventIds.clear();
+              });
             },
           ),
         ],
@@ -139,30 +199,35 @@ class _CalendarPageState extends State<CalendarPage> {
                     valueListenable: _selectedEvents,
                     builder: (context, events, _) {
                       if (events.isEmpty) {
-                        return const Center(
-                            child: Text('Nenhum evento para este dia.'));
+                        return const Center(child: Text('Nenhum evento para este dia.'));
                       }
                       return ListView.builder(
                         itemCount: events.length,
                         itemBuilder: (context, index) {
-                          final event = events[index];
+                          final event = events[index] as Map<String, dynamic>;
+                          final eventId = (event['id'] as num?)?.toInt();
+                          final isSubscribed = eventId != null && _subscribedEventIds.contains(eventId);
                           return Card(
-                            margin: const EdgeInsets.symmetric(
-                                horizontal: 12.0, vertical: 4.0),
+                            margin: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
                             child: ListTile(
-                              leading: const Icon(Icons.event_available,
-                                  color: Colors.indigo),
-                              title: Text(event['title']),
-                              subtitle: Text(event['time']?.toString() ??
-                                  'Horário não definido'),
-                              trailing: const Icon(Icons.arrow_forward_ios),
+                              leading: const Icon(Icons.event_available, color: Colors.indigo),
+                              title: Text(event['title'] ?? 'Sem título'),
+                              subtitle: Text(event['time']?.toString() ?? 'Horário não definido'),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: Icon(isSubscribed ? Icons.bookmark : Icons.bookmark_border),
+                                    tooltip: isSubscribed ? 'Remover da Minha Agenda' : 'Adicionar à Minha Agenda',
+                                    onPressed: eventId == null ? null : () => _toggleSubscription(eventId),
+                                  ),
+                                  const Icon(Icons.arrow_forward_ios, size: 16),
+                                ],
+                              ),
                               onTap: () {
                                 Navigator.push(
                                   context,
-                                  MaterialPageRoute(
-                                    builder: (context) =>
-                                        EventDetailPage(event: event),
-                                  ),
+                                  MaterialPageRoute(builder: (context) => EventDetailPage(event: event)),
                                 );
                               },
                             ),

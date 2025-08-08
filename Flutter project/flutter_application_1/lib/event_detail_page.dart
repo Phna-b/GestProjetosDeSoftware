@@ -1,5 +1,4 @@
 // lib/event_detail_page.dart
-
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -14,15 +13,18 @@ class EventDetailPage extends StatelessWidget {
     String formattedDate = 'Data não informada';
     String formattedTime = 'Hora não informada';
 
-    if (event['date'] != null) {
+    // Formata data
+    if (event['date'] != null && event['date'].toString().trim().isNotEmpty) {
       try {
         final dateTime = DateTime.parse(event['date']);
         formattedDate = DateFormat('dd/MM/yyyy', 'pt_BR').format(dateTime);
-        formattedTime = DateFormat('HH:mm').format(dateTime);
       } catch (e) {
         debugPrint("Erro ao formatar data do evento: $e");
       }
-    } else if (event['time'] != null) {
+    }
+
+    // Usa hora vinda do backend sem tentar parsear
+    if (event['time'] != null && event['time'].toString().trim().isNotEmpty) {
       formattedTime = event['time'];
     }
 
