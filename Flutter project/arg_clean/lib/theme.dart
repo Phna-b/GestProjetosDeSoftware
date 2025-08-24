@@ -4,7 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 class AppTheme {
   static ThemeData light = ThemeData(
     colorScheme: ColorScheme.fromSeed(
-      seedColor: const Color(0xFF6750A4), // mude a cor base aqui
+      seedColor: const Color(0xFF6750A4), 
       brightness: Brightness.light,
     ),
     useMaterial3: true,
