@@ -1,0 +1,52 @@
+name: calendar_checkin_chat
+description: Flutter + Firebase (Google) com calendário estático, favoritos, check-in e chat por evento
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+  flutter: ">=3.22.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  firebase_core: ^3.4.0
+  firebase_auth: ^5.1.2
+  cloud_firestore: ^5.4.4
+  google_sign_in: ^6.2.1
+  provider: ^6.1.2
+  intl: ^0.19.0
+  flutter_launcher_icons: ^0.14.4
+  google_fonts: ^6.3.0
+  flutter_native_splash: ^2.4.6
+  firebase_messaging: ^15.2.10
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/google.png
+    - assets/images/icon_1024.png
+
+ 
+ 
+flutter_launcher_icons:
+  android: "launcher_icon"
+  image_path: assets/images/icon_1024.png
+  adaptive_icon_background: "#F6F1FF"     
+  adaptive_icon_foreground: assets/images/icon_1024.png
+
+ 
+flutter_native_splash:
+  color: "#F6F1FF"               
+  color_dark: "#1E1B2E"           
+  image: assets/images/icon_1024.png
+  image_dark: assets/images/icon_1024.png
+
+ 
+  android_12:
+    image: assets/images/icon_1024.png
+    image_dark: assets/images/icon_1024.png
+    color: "#F6F1FF"
+    color_dark: "#1E1B2E"
+  android: true
