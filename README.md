@@ -48,4 +48,6 @@ flutter run -d chrome
 ### Para executar no Android 
 
 Acesse no modo depuração e execute:
-adb install -r build\app\outputs\flutter-apk\app-debug.apk
+adb install -r Flutter project/app.apk
+
+Ou apenas instalar o apk no seu dispositivo móvel.
