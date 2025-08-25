@@ -35,17 +35,17 @@ Como Executar o Projeto
 Executar o Frontend (Aplicação Flutter)
 
 # 1. Navegue para a pasta do frontend
-cd "Flutter project/flutter_application_1"
+cd "Flutter project/arg_clean"
 
 # 2. Descarregue as dependências do Flutter (apenas na primeira vez)
 flutter pub get
 
 # 3. Execute a aplicação (escolha uma das opções abaixo)
 
-# Para executar no navegador Chrome
+### Para executar no navegador Chrome
 flutter run -d chrome
 
-# Para executar no Android 
+### Para executar no Android 
 
 Acesse no modo depuração e execute:
 adb install -r build\app\outputs\flutter-apk\app-debug.apk
